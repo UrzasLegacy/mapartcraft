@@ -451,11 +451,6 @@ class MapPreview extends Component {
     return (
       <div className="section mapPreviewDiv">
         <h2>{getLocaleString("MAP-PREVIEW/TITLE")}</h2>
-        <label>
-          <input type="checkbox" checked={this.state.usePixelOE} onChange={(event) =>
-            this.setState({ usePixelOE: event.target.checked, pixelOEStatus: "" })} />
-          PixelOE pixelization
-        </label>
         <input type="file" className="imgUpload" ref={this.fileInputRef} onChange={onFileDialogEvent} />
         <div>
           <span
@@ -481,18 +476,7 @@ class MapPreview extends Component {
           />
           <canvas className="displayNone" width={128 * optionValue_mapSize_x} height={128 * optionValue_mapSize_y} ref={this.canvasRef_source}></canvas>
         </div>
-        <span role="status">{this.state.pixelOEStatus}</span>
-        {this.state.usePixelOE && (
-          <fieldset className="pixelOEOptions">
-            <legend>PixelOE settings</legend>
-            {this.pixelOEControl("mode", "Sampling", ["contrast", "nearest"])}
-            {this.pixelOEControl("thickness", "Outline thickness", [0, 1, 2, 3, 4, 5, 6])}
-            {this.pixelOEControl("patch", "Outline patch size (source pixels)", [2, 4, 8, 16])}
-            {this.pixelOEControl("brightnessWeight", "Brightness weight", [0, 2, 4, 6, 8, 10, 12, 16, 20])}
-            {this.pixelOEControl("contrastWeight", "Local contrast weight", [0, 1, 2, 3, 4, 6, 8, 10])}
-            <button type="button" onClick={() => this.setState({ pixelOEOptions: pixelOEDefaults })}>Reset PixelOE settings</button>
-          </fieldset>
-        )}
+
         <div className="mapResolutionAndZoom">
           <div>
             <Tooltip tooltipText={getLocaleString("MAP-PREVIEW/BEST-RESOLUTION-TT")}>
@@ -540,6 +524,23 @@ class MapPreview extends Component {
             </Tooltip>
           </div>
         </div>
+        <span role="status">{this.state.pixelOEStatus}</span>
+        <label>
+          <input type="checkbox" checked={this.state.usePixelOE} onChange={(event) =>
+            this.setState({ usePixelOE: event.target.checked, pixelOEStatus: "" })} />
+          PixelOE pixelization
+        </label>
+        {this.state.usePixelOE && (
+          <fieldset className="pixelOEOptions">
+            <legend>PixelOE settings</legend>
+            {this.pixelOEControl("mode", "Sampling", ["contrast", "nearest"])}
+            {this.pixelOEControl("thickness", "Outline thickness", [0, 1, 2, 3, 4, 5, 6])}
+            {this.pixelOEControl("patch", "Outline patch size (source pixels)", [2, 4, 8, 16])}
+            {this.pixelOEControl("brightnessWeight", "Brightness weight", [0, 2, 4, 6, 8, 10, 12, 16, 20])}
+            {this.pixelOEControl("contrastWeight", "Local contrast weight", [0, 1, 2, 3, 4, 6, 8, 10])}
+            <button type="button" onClick={() => this.setState({ pixelOEOptions: pixelOEDefaults })}>Reset PixelOE settings</button>
+          </fieldset>
+        )}
         <div
           className="progress"
           style={

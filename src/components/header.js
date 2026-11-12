@@ -17,15 +17,28 @@ class Header extends Component {
             {getLocaleString("FAQ/VIDEO-TUTORIAL")}
           </a>
           <span> | </span>
-          <a href="https://github.com/leingen/mapartcraft" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/urzaslegacy/mapartcraft" target="_blank" rel="noopener noreferrer">
             GitHub
           </a>
         </h3>
 
         <p>
-          <b>I've added transparency and staggered staircasing for carpet water canvas, PLEASE TEST IN CREATIVE BEFORE USING IT FOR REAL.</b>
+          <b>I've added
+          &nbsp;
+          <a href="https://github.com/KohakuBlueleaf/PixelOE" target="_blank" rel="noopener noreferrer">
+            PixelOE
+          </a>
+          &nbsp; as a pixelization preprocessing option. This should allow for better pixelization results for details in small resolution images.</b>
         <br></br>
-          Forked from  
+        <br></br>
+          <b>
+          <a href="https://github.com/leingen/mapartcraft" target="_blank" rel="noopener noreferrer">
+          Leingen
+          </a>
+          &nbsp; added transparency and staggered staircasing for carpet water canvas, PLEASE TEST IN CREATIVE BEFORE USING IT FOR REAL.</b>
+        <br></br>
+        <br></br>
+          Forked from
           &nbsp;
           <a href="https://github.com/mike2b2t/mapartcraft" target="_blank" rel="noopener noreferrer">
             mike2b2t

@@ -17,9 +17,14 @@ import IMG_GridOverlay from "../../images/gridOverlay.png";
 
 import "./mapPreview.css";
 
+const pixelOEDefaults = { thickness: 3, patch: 4, mode: "contrast", brightnessWeight: 10, contrastWeight: 3 };
+
 class MapPreview extends Component {
   state = {
     workerProgress: 0,
+    usePixelOE: false,
+    pixelOEOptions: pixelOEDefaults,
+    pixelOEStatus: "",
   };
 
   mapCanvasWorker = new WorkerBuilder(MapCanvasWorker);
@@ -33,6 +38,7 @@ class MapPreview extends Component {
 
   shouldCanvasUpdate_source(prevProps, newProps, prevState, newState) {
     const propChanges = [
+      prevState.usePixelOE === newState.usePixelOE,
       prevProps.coloursJSON === newProps.coloursJSON,
       prevProps.selectedBlocks === newProps.selectedBlocks,
       prevProps.disabledTones === newProps.disabledTones,
@@ -63,6 +69,7 @@ class MapPreview extends Component {
   shouldCanvasUpdate_display(prevProps, newProps, prevState, newState) {
     // ugly but useful method to determine whether map canvas contents should be redrawn on component update
     const propChanges = [
+      prevState.usePixelOE === newState.usePixelOE,
       prevProps.coloursJSON === newProps.coloursJSON,
       prevProps.selectedBlocks === newProps.selectedBlocks,
       prevProps.disabledTones === newProps.disabledTones,
@@ -100,6 +107,18 @@ class MapPreview extends Component {
   }
 
   componentDidUpdate(prevProps, prevState) {
+    const geometryChanged = ["optionValue_mapSize_x", "optionValue_mapSize_y", "optionValue_cropImage",
+      "optionValue_cropImage_zoom", "optionValue_cropImage_percent_x", "optionValue_cropImage_percent_y"]
+      .some(key => prevProps[key] !== this.props[key]);
+    if (prevProps.uploadedImage !== this.props.uploadedImage || prevState.usePixelOE !== this.state.usePixelOE ||
+        (this.state.usePixelOE && (geometryChanged || prevState.pixelOEOptions !== this.state.pixelOEOptions))) {
+      this.stopPixelOE();
+      if (this.props.uploadedImage && this.state.usePixelOE) {
+        this.startPixelOE(this.props.uploadedImage);
+        return;
+      }
+    }
+    if (this.state.usePixelOE && !this.expandedImage) return;
     if (this.shouldCanvasUpdate_source(prevProps, this.props, prevState, this.state)) {
       this.updateCanvas_source(); // draw uploaded image on source canvas
     }
@@ -190,6 +209,105 @@ class MapPreview extends Component {
     return colourHex_return;
   }
 
+  stopPixelOE() {
+    if (this.outlineWorker) this.outlineWorker.terminate();
+    this.outlineWorker = null;
+    this.expandedImage = null;
+  }
+
+  startPixelOE(image) {
+    this.mapCanvasWorker.terminate();
+    this.props.onMapPreviewWorker_begin();
+    this.setState({ pixelOEStatus: "Expanding outlines..." });
+    const fail = () => this.setState({ usePixelOE: false, pixelOEStatus: "PixelOE failed. Using standard sampling." });
+    try {
+      const canvas = document.createElement("canvas");
+      const [x, y, width, height] = this.sourceCrop();
+      canvas.width = Math.max(1, width);
+      canvas.height = Math.max(1, height);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(image, -x, -y);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const worker = new Worker(process.env.PUBLIC_URL + "/pixeloe/outline.js");
+      this.outlineWorker = worker;
+      worker.onmessage = ({ data }) => {
+        if (worker !== this.outlineWorker) return;
+        worker.terminate();
+        this.outlineWorker = null;
+        canvas.width = data.width;
+        canvas.height = data.height;
+        ctx.putImageData(data, 0, 0);
+        this.expandedImage = canvas;
+        this.updateCanvas_source();
+        this.updateCanvas_display();
+        this.setState({ pixelOEStatus: "" });
+      };
+      worker.onerror = () => { if (worker === this.outlineWorker) fail(); };
+      worker.postMessage({ options: this.state.pixelOEOptions, image: pixels, width: this.canvasRef_source.current.width, height: this.canvasRef_source.current.height }, [pixels.data.buffer]);
+    } catch (error) {
+      fail();
+    }
+  }
+
+  pixelOEControl(key, label, choices) {
+    const value = this.state.pixelOEOptions[key];
+    return (
+      <label>
+        {label}{" "}
+        <select value={value} onChange={event => {
+          const next = typeof value === "number" ? Number(event.target.value) : event.target.value;
+          this.setState(state => ({ pixelOEOptions: { ...state.pixelOEOptions, [key]: next } }));
+        }}>
+          {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
+        </select>
+      </label>
+    );
+  }
+
+  sourceCrop() {
+    const {
+      uploadedImage,
+      optionValue_mapSize_x,
+      optionValue_mapSize_y,
+      optionValue_cropImage,
+      optionValue_cropImage_zoom,
+      optionValue_cropImage_percent_x,
+      optionValue_cropImage_percent_y,
+    } = this.props;
+    switch (optionValue_cropImage) {
+      case CropModes.OFF.uniqueId: {
+        return [0, 0, uploadedImage.width, uploadedImage.height];
+      }
+      case CropModes.CENTER.uniqueId:
+      case CropModes.MANUAL.uniqueId: {
+        const img_width = uploadedImage.width;
+        const img_height = uploadedImage.height;
+        let samplingWidth;
+        let samplingHeight;
+        let samplingOffset_x;
+        let samplingOffset_y;
+        if (img_width * optionValue_mapSize_y > img_height * optionValue_mapSize_x) {
+          // image w/h greater than canvas w/h
+          samplingWidth = Math.floor((10 * img_height * optionValue_mapSize_x) / (optionValue_mapSize_y * optionValue_cropImage_zoom));
+          // the 10 is because the input is from 10 to 50 in steps of 1; scale down by 10
+          samplingHeight = Math.floor((10 * img_height) / optionValue_cropImage_zoom);
+          samplingOffset_x = Math.floor((optionValue_cropImage_percent_x * (img_width - samplingWidth)) / 100);
+          samplingOffset_y = Math.floor((optionValue_cropImage_percent_y * (img_height - samplingHeight)) / 100);
+        } else {
+          // image w/h leq canvas w/h
+          samplingWidth = Math.floor((10 * img_width) / optionValue_cropImage_zoom);
+          samplingHeight = Math.floor((10 * img_width * optionValue_mapSize_y) / (optionValue_mapSize_x * optionValue_cropImage_zoom));
+          samplingOffset_x = Math.floor((optionValue_cropImage_percent_x * (img_width - samplingWidth)) / 100);
+          samplingOffset_y = Math.floor((optionValue_cropImage_percent_y * (img_height - samplingHeight)) / 100);
+        }
+        return [samplingOffset_x, samplingOffset_y, samplingWidth, samplingHeight];
+      }
+      default: {
+        throw new Error("Unknown optionValue_cropImage");
+      }
+    }
+  }
+
   updateCanvas_source() {
     const {
       selectedBlocks,
@@ -200,14 +318,6 @@ class MapPreview extends Component {
       preProcessingValue_backgroundColourSelect,
       preProcessingValue_backgroundColour,
       uploadedImage,
-    } = this.props;
-    const {
-      optionValue_mapSize_x,
-      optionValue_mapSize_y,
-      optionValue_cropImage,
-      optionValue_cropImage_zoom,
-      optionValue_cropImage_percent_x,
-      optionValue_cropImage_percent_y,
     } = this.props;
     const { canvasRef_source } = this;
     const ctx_source = canvasRef_source.current.getContext("2d");
@@ -238,50 +348,9 @@ class MapPreview extends Component {
       ctx_source.filter = "none";
     }
 
-    switch (optionValue_cropImage) {
-      case CropModes.OFF.uniqueId: {
-        ctx_source.drawImage(uploadedImage, 0, 0, ctx_source.canvas.width, ctx_source.canvas.height);
-        break;
-      }
-      case CropModes.CENTER.uniqueId:
-      case CropModes.MANUAL.uniqueId: {
-        const img_width = uploadedImage.width;
-        const img_height = uploadedImage.height;
-        let samplingWidth;
-        let samplingHeight;
-        let samplingOffset_x;
-        let samplingOffset_y;
-        if (img_width * optionValue_mapSize_y > img_height * optionValue_mapSize_x) {
-          // image w/h greater than canvas w/h
-          samplingWidth = Math.floor((10 * img_height * optionValue_mapSize_x) / (optionValue_mapSize_y * optionValue_cropImage_zoom));
-          // the 10 is because the input is from 10 to 50 in steps of 1; scale down by 10
-          samplingHeight = Math.floor((10 * img_height) / optionValue_cropImage_zoom);
-          samplingOffset_x = Math.floor((optionValue_cropImage_percent_x * (img_width - samplingWidth)) / 100);
-          samplingOffset_y = Math.floor((optionValue_cropImage_percent_y * (img_height - samplingHeight)) / 100);
-        } else {
-          // image w/h leq canvas w/h
-          samplingWidth = Math.floor((10 * img_width) / optionValue_cropImage_zoom);
-          samplingHeight = Math.floor((10 * img_width * optionValue_mapSize_y) / (optionValue_mapSize_x * optionValue_cropImage_zoom));
-          samplingOffset_x = Math.floor((optionValue_cropImage_percent_x * (img_width - samplingWidth)) / 100);
-          samplingOffset_y = Math.floor((optionValue_cropImage_percent_y * (img_height - samplingHeight)) / 100);
-        }
-        ctx_source.drawImage(
-          uploadedImage,
-          samplingOffset_x,
-          samplingOffset_y,
-          samplingWidth,
-          samplingHeight,
-          0,
-          0,
-          ctx_source.canvas.width,
-          ctx_source.canvas.height
-        );
-        break;
-      }
-      default: {
-        throw new Error("Unknown optionValue_cropImage");
-      }
-    }
+    const image = this.expandedImage || uploadedImage;
+    const crop = this.expandedImage ? [0, 0, image.width, image.height] : this.sourceCrop();
+    ctx_source.drawImage(image, ...crop, 0, 0, ctx_source.canvas.width, ctx_source.canvas.height);
   }
 
   updateCanvas_display() {
@@ -363,6 +432,7 @@ class MapPreview extends Component {
   };
 
   componentWillUnmount() {
+    this.stopPixelOE();
     this.mapCanvasWorker.terminate();
   }
 
@@ -381,6 +451,11 @@ class MapPreview extends Component {
     return (
       <div className="section mapPreviewDiv">
         <h2>{getLocaleString("MAP-PREVIEW/TITLE")}</h2>
+        <label>
+          <input type="checkbox" checked={this.state.usePixelOE} onChange={(event) =>
+            this.setState({ usePixelOE: event.target.checked, pixelOEStatus: "" })} />
+          PixelOE pixelization
+        </label>
         <input type="file" className="imgUpload" ref={this.fileInputRef} onChange={onFileDialogEvent} />
         <div>
           <span
@@ -406,6 +481,18 @@ class MapPreview extends Component {
           />
           <canvas className="displayNone" width={128 * optionValue_mapSize_x} height={128 * optionValue_mapSize_y} ref={this.canvasRef_source}></canvas>
         </div>
+        <span role="status">{this.state.pixelOEStatus}</span>
+        {this.state.usePixelOE && (
+          <fieldset className="pixelOEOptions">
+            <legend>PixelOE settings</legend>
+            {this.pixelOEControl("mode", "Sampling", ["contrast", "nearest"])}
+            {this.pixelOEControl("thickness", "Outline thickness", [0, 1, 2, 3, 4, 5, 6])}
+            {this.pixelOEControl("patch", "Outline patch size (source pixels)", [2, 4, 8, 16])}
+            {this.pixelOEControl("brightnessWeight", "Brightness weight", [0, 2, 4, 6, 8, 10, 12, 16, 20])}
+            {this.pixelOEControl("contrastWeight", "Local contrast weight", [0, 1, 2, 3, 4, 6, 8, 10])}
+            <button type="button" onClick={() => this.setState({ pixelOEOptions: pixelOEDefaults })}>Reset PixelOE settings</button>
+          </fieldset>
+        )}
         <div className="mapResolutionAndZoom">
           <div>
             <Tooltip tooltipText={getLocaleString("MAP-PREVIEW/BEST-RESOLUTION-TT")}>

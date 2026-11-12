@@ -54,3 +54,15 @@
   background-color: #688e6b;
   height: 24px;
 }
+
+.pixelOEOptions {
+  display: grid;
+  gap: 0.35em;
+  margin: 0.5em 0;
+  text-align: left;
+}
+.pixelOEOptions label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6em;
+}

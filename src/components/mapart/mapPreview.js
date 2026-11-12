@@ -17,7 +17,7 @@ import IMG_GridOverlay from "../../images/gridOverlay.png";
 
 import "./mapPreview.css";
 
-const pixelOEDefaults = { thickness: 3, patch: 4, mode: "contrast", brightnessWeight: 10, contrastWeight: 3 };
+const pixelOEDefaults = { thickness: 4, patch: 4, mode: "nearest", brightnessWeight: 10, contrastWeight: 3 };
 
 class MapPreview extends Component {
   state = {
@@ -524,12 +524,12 @@ class MapPreview extends Component {
             </Tooltip>
           </div>
         </div>
-        <span role="status">{this.state.pixelOEStatus}</span>
         <label>
           <input type="checkbox" checked={this.state.usePixelOE} onChange={(event) =>
             this.setState({ usePixelOE: event.target.checked, pixelOEStatus: "" })} />
           PixelOE pixelization
         </label>
+        <span role="status">{this.state.pixelOEStatus}</span>
         {this.state.usePixelOE && (
           <fieldset className="pixelOEOptions">
             <legend>PixelOE settings</legend>

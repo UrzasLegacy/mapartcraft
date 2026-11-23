@@ -37,9 +37,9 @@ class MapartController extends Component {
     optionValue_cropImage_percent_x: 50,
     optionValue_cropImage_percent_y: 50,
     optionValue_showGridOverlay: false,
-    optionValue_staircasing: MapModes.SCHEMATIC_NBT.staircaseModes.VALLEY.uniqueId,
+    optionValue_staircasing: MapModes.SCHEMATIC_NBT.staircaseModes.OFF.uniqueId,
     optionValue_whereSupportBlocks: WhereSupportBlocksModes.ALL_OPTIMIZED.uniqueId,
-    optionValue_supportBlock: "cobblestone",
+    optionValue_supportBlock: "glass",
     optionValue_transparency: false,
     optionValue_transparencyTolerance: 128,
     optionValue_mapdatFilenameUseId: true,
@@ -164,6 +164,12 @@ class MapartController extends Component {
   }.bind(this);
 
   componentDidMount() {
+    if (!new URL(window.location.href).searchParams.has("preset")) {
+      this.handlePresetChange({
+        target: { value: "Piston clearable" },
+      });
+    }
+    
     this.loadUploadedImageFromURL(IMG_Upload, "mapart");
 
     document.addEventListener("dragover", this.eventListener_dragover);
